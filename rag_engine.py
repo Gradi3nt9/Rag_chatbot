@@ -6,21 +6,20 @@ from langchain_groq import ChatGroq
 from langchain_classic.chains import ConversationalRetrievalChain
 from langchain_classic.memory import ConversationBufferWindowMemory
 from langchain_classic.prompts import PromptTemplate
+from pathlib import Path
 from dotenv import load_dotenv
 import os
 
 
-def loaf_pdfs(pdfs: set):
+def load_pdfs(pdfs: str):
     docs = []
     for filename in os.listdir(pdfs):
         if filename.endswith('.pdf'):
             loader = PyPDFLoader(os.path.join(pdfs, filename))
             docs.extend(loader.load())
-            docs.extend(docs)
     return docs
 
-def split_chunks(documents):
-
+def split_into_chunks(documents):
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=800, 
         chunk_overlap=150,
@@ -29,7 +28,7 @@ def split_chunks(documents):
     chunks = splitter.split_documents(documents)
     return chunks
 
-def build_vectorstore(chunks, persist_dir: str = "./chroma_db"):
+def build_vector_store(chunks, persist_dir: str = "./chroma_db"):
     # Create embeddings using HuggingFace's model
     embedding_model = HuggingFaceEmbeddings(
         model_name="sentence-transformers/all-MiniLM-L6-v2"
@@ -53,11 +52,12 @@ def load_existing_vector_store(persist_dir: str = "./chroma_db"):
         persist_directory=persist_dir
     )
 
-load_dotenv()
+load_dotenv(dotenv_path=Path(__file__).parent / ".env")
 
 def build_rag_chain(vectorstore):
     # Initialize the Groq LLM with your API key from .env
     llm = ChatGroq(
+        api_key=os.getenv("GROQ_API_KEY"),
         model = "llama-3.3-70b-versatile",
         temperature=0.2, # lower = more factual, less creative. Good for RAG.
     )
@@ -77,8 +77,7 @@ def build_rag_chain(vectorstore):
     )
 
     qa_prompt = PromptTemplate.from_template(
-        input_variables=["question", "context"],
-        template="""You are a helpful assistant that answers questions based on the provided documents.
+        """You are a helpful assistant that answers questions based on the provided documents.
 
 Conversation history:
 {chat_history}
@@ -108,7 +107,7 @@ Answer:"""
     return chain
 
 
-def query_rag_chain(chain, question: str):
+def query_rag(chain, question: str):
     result = chain.invoke({"question": question})
     
     answer = result["answer"]
